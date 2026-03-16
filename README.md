@@ -30,6 +30,7 @@ The key relationship: `S = 1` implies `A = 1`, but `S = 0` can mean either `A = 
 library(MASS)
 source("R/causalPUtrt.R")
 
+set.seed(42)
 # --- DGP (beta0=0, gamma=0.8) ---
 n <- 1500
 mu_X <- c(1, -1)
@@ -62,6 +63,7 @@ cat("TM:     est =", round(res_tm$est, 3), "\n")
 library(MASS)
 source("R/causalPUtrt.R")
 
+set.seed(123)
 # --- DGP (m=0.2, n1=500, case-control) ---
 n0 <- 1000; n1 <- 500; pA_pop0 <- 0.3
 Sigma <- matrix(c(1, 0.2, 0.2, 1), 2, 2)
@@ -125,9 +127,7 @@ SAR-EM runs Python's `sarpu` package through `reticulate`. You need:
     install.packages("reticulate")
     ```
 
-2. **Python environment with sarpu installed** (choose one):
-
-    **Option A: Using virtualenv**
+2. **Python environment with sarpu installed** (requires **Python >= 3.10** and **virtualenv**):
 
     ```bash
     virtualenv -p python3 /path/to/your/venv
@@ -139,49 +139,26 @@ SAR-EM runs Python's `sarpu` package through `reticulate`. You need:
     pip install -e sarpu/
     ```
 
-    **Option B: Using an existing conda/miniconda**
-
-    If you already have conda or miniconda installed:
-
-    ```bash
-    conda create -n sarem_env python=3.10 -y
-    conda activate sarem_env
-
-    git clone https://github.com/ML-KULeuven/SAR-PU.git
-    cd SAR-PU
-    pip install -r requirements.txt
-    pip install -e sarpu/
-    ```
-
-    **Option C: Install miniconda via reticulate**
-
-    If you don't have Python set up yet — this is the simplest option:
-
-    ```r
-    reticulate::install_miniconda()   # one-time setup
-    reticulate::conda_create("sarem_env", python_version = "3.10")
-    ```
-
-    Then install sarpu from the terminal:
-
-    ```bash
-    # Activate the conda env that reticulate created
-    # (path shown in the R output above, typically ~/miniconda/envs/sarem_env)
-    conda activate sarem_env
-
-    git clone https://github.com/ML-KULeuven/SAR-PU.git
-    cd SAR-PU
-    pip install -r requirements.txt
-    pip install -e sarpu/
-    ```
-
-    > **Note:** `reticulate` requires Python built with `--enable-shared`. Most conda/miniconda Pythons satisfy this. System Python from `apt` often does not — if you see a "shared library" error, use Option A or B instead.
+    > **Note (scikit-learn >= 1.7):** The original SAR-PU code uses deprecated parameters (`multi_class`, `penalty`, `n_jobs`). After cloning, replace the `LogisticRegressionPU` class in `SAR-PU/sarpu/sarpu/PUmodels.py` with:
+    >
+    > ```python
+    > class LogisticRegressionPU(LogisticRegression, BasePU):
+    >     def __init__(self, dual=False, tol=1e-4, C=1.0,
+    >                  fit_intercept=True, intercept_scaling=1, class_weight=None,
+    >                  random_state=None, solver='liblinear', max_iter=100,
+    >                  verbose=0, warm_start=False):
+    >         LogisticRegression.__init__(self, dual=dual, tol=tol, C=C,
+    >                          fit_intercept=fit_intercept, intercept_scaling=intercept_scaling,
+    >                         class_weight=class_weight, random_state=random_state,
+    >                         solver=solver, max_iter=max_iter,
+    >                         verbose=verbose, warm_start=warm_start)
+    > ```
 
 3. **In R, initialize before use**:
 
     ```r
     init_sarem(
-      python_env = "/path/to/your/env",  # conda env or virtualenv path (auto-detected)
+      python_env = "/path/to/your/venv",
       sarpu_path = "/path/to/SAR-PU/sarpu"
     )
     ```
