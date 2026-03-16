@@ -241,3 +241,6 @@ causalPUtrt/
 ## References
 
 - Bekker, J., & Davis, J. (2020). Learning from positive and unlabeled data: A survey. *Machine Learning*, 109, 719–760.
+- Bekker, J., & Davis, J. (2019). Beyond the selected completely at random assumption for learning from positive and unlabeled data. *ECML-PKDD 2019*. arXiv:1809.03207. **(SAR-EM)**
+- Furmańczyk, K., Mielniczuk, J., Rejchel, W., & Teisseyre, P. (2023). Double logistic regression approach to biased positive-unlabeled data. *ECAI 2023*, 372, 764–771. **(TM)**
+- Liu, S., Yeh, C.-K., Zhang, X., Tian, Q., & Li, P. (2025). Positive and unlabeled data: Model, estimation, inference, and classification. *Journal of the American Statistical Association*, 1–12. **(DETM)**
