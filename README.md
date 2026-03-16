@@ -17,31 +17,77 @@ The key relationship: `S = 1` implies `A = 1`, but `S = 0` can mean either `A = 
 
 ## Two Settings
 
-| Setting | Description | Estimator |
-|---------|-------------|-----------|
-| **One-sample** | All units from one population | `proposed_estimator_onesample()` |
-| **Two-sample** | Pop 0 (S=0) and Pop 1 (S=1) sampled separately (case-control) | `proposed_estimator_twosample()` |
+| Setting | Description | Wrapper | Low-level estimator |
+|---------|-------------|---------|---------------------|
+| **One-sample** | All units from one population | `ate_onesample()` | `proposed_estimator_onesample()` |
+| **Two-sample** | Pop 0 (S=0) and Pop 1 (S=1) sampled separately (case-control) | `ate_twosample()` | `proposed_estimator_twosample()` |
 
-## Quick Start (TM only, no external dependencies)
+## Quick Start
 
-TM (Two Models) is implemented in pure R and requires no Python or external packages.
+### One-Sample
 
 ```r
-# From the repo root directory:
+library(MASS)
 source("R/causalPUtrt.R")
 
-# Fit TM to estimate P(A=1|X)
-tm_fit <- pu_learn_tm(X_train, S_train, epochs = 500)
-piA_hat <- predict_proba_pu(tm_fit$model_clf, X)
+# --- DGP (beta0=0, gamma=0.8) ---
+n <- 1500
+mu_X <- c(1, -1)
+Sigma_X <- matrix(c(1, 0.2, 0.2, 1), 2, 2)
+X <- mvrnorm(n, mu_X, Sigma_X)
+colnames(X) <- c("X1", "X2")
 
-# One-sample ATE (with sample splitting)
-result <- proposed_estimator_onesample(X, S, Y, piA_hat, piS_hat,
-                                       split_idx, mu1_hat)
-# result contains: est, var, se, ci_lower, ci_upper
+piA_true <- plogis(X[,1] + X[,2])            # beta0=0, beta=1
+A <- rbinom(n, 1, piA_true)
+e_true <- plogis(0.8 * (X[,1] + X[,2]))      # gamma=0.8
+S <- A * rbinom(n, 1, e_true)
+Y0 <- X[,1] - X[,2] + rnorm(n)
+Y1 <- Y0 + 0.5 + 0.25*X[,1] - 0.25*X[,2]
+Y  <- ifelse(A == 0, Y0, Y1)
+# True ATE = 1.0
 
-# Two-sample ATE
-result <- proposed_estimator_twosample(data.frame(S=S, Y=Y),
-                                       piA_hat, piS_hat, mu_hat, mu1_hat)
+# TM
+res_tm <- ate_onesample(X, S, Y, pu_method = "tm")
+cat("TM:     est =", round(res_tm$est, 3), "\n")
+
+# SAR-EM (requires Python sarpu; see Installation)
+# init_sarem("/path/to/venv", "/path/to/sarpu")
+# res_sarem <- ate_onesample(X, S, Y, pu_method = "sarem")
+# cat("SAR-EM: est =", round(res_sarem$est, 3), "\n")
+```
+
+### Two-Sample
+
+```r
+library(MASS)
+source("R/causalPUtrt.R")
+
+# --- DGP (m=0.2, n1=500, case-control) ---
+n0 <- 1000; n1 <- 500; pA_pop0 <- 0.3
+Sigma <- matrix(c(1, 0.2, 0.2, 1), 2, 2)
+
+A0 <- rbinom(n0, 1, pA_pop0)
+X0 <- matrix(NA, n0, 2)
+X0[A0==1,] <- mvrnorm(sum(A0), c(0, 0), Sigma)
+X0[A0==0,] <- mvrnorm(n0 - sum(A0), c(0.5, -0.5), Sigma)
+
+X1 <- mvrnorm(n1, c(0.2, -0.2), Sigma)
+X  <- rbind(X0, X1); colnames(X) <- c("X1", "X2")
+A  <- c(A0, rep(1, n1))
+S  <- c(rep(0, n0), rep(1, n1))
+
+Y0_pot <- X[,1] - X[,2] + rnorm(n0 + n1)
+Y1_pot <- Y0_pot + 0.5 + 0.25*X[,1] - 0.25*X[,2]
+Y <- ifelse(A == 0, Y0_pot, Y1_pot)
+
+# TM
+res_tm <- ate_twosample(X, S, Y, pu_method = "tm")
+cat("TM:     est =", round(res_tm$est, 3), "\n")
+
+# SAR-EM
+# init_sarem("/path/to/venv", "/path/to/sarpu")
+# res_sarem <- ate_twosample(X, S, Y, pu_method = "sarem")
+# cat("SAR-EM: est =", round(res_sarem$est, 3), "\n")
 ```
 
 ## PU Learning Methods
@@ -108,19 +154,12 @@ SAR-EM runs Python's `sarpu` package through `reticulate`. You need:
     )
     ```
 
-    You must know:
-    - `virtualenv_path`: The path to the Python virtualenv where sarpu is installed.
-    - `sarpu_path`: The path to the `sarpu/` directory inside the cloned SAR-PU repo (the directory that contains the `sarpu/` Python package).
-
-    These paths are **machine-specific** — set them according to your environment.
-
 ### DETM (PUEM R package)
 
 DETM uses the `PUEM` R package, which is not on CRAN. Install from GitHub:
 
 ```r
 # Option 1: Install from the PUEM source directory
-# Download or clone the PUEM package, then:
 R CMD INSTALL /path/to/PUEM/PUEM
 
 # Option 2: If available via devtools
@@ -133,93 +172,50 @@ The PUEM package depends on `glmnet`:
 install.packages("glmnet")
 ```
 
-## Usage
+## Advanced Usage
 
-### One-Sample Setting
+### Low-Level Estimators
+
+The wrapper functions (`ate_onesample`, `ate_twosample`) handle the full pipeline. For custom pipelines, use the low-level estimators directly:
 
 ```r
-source("R/causalPUtrt.R")
-
-# Your data: X (n x p matrix), S (0/1 vector), Y (outcome vector)
-
-# Step 1: Sample split
+# One-sample: manual pipeline
 split_idx <- sample(1:n, n/2)
-X_train <- X[split_idx, ]
-S_train <- S[split_idx]
-Y_train <- Y[split_idx]
+tm_fit  <- pu_learn_tm(X[split_idx,], S[split_idx], epochs = 500)
+piA_hat <- predict_proba_pu(tm_fit$model_clf, X)
+# ... estimate piS_hat, mu1_hat on Set 1 ...
+result <- proposed_estimator_onesample(S, Y, piA_hat, piS_hat, split_idx, mu1_hat)
 
-# Step 2: Estimate piA via PU learning on training set
-tm_fit  <- pu_learn_tm(X_train, S_train, epochs = 500)
-piA_hat <- predict_proba_pu(tm_fit$model_clf, X)  # predict on ALL data
-
-# Step 3: Estimate nuisance parameters on training set
-# piS = P(S=1|X)
-fit_piS <- glm(S ~ ., data = data.frame(S = S_train, X_train), family = binomial())
-piS_hat <- predict(fit_piS, newdata = data.frame(X), type = "response")
-
-# mu1 = E[Y|S=1, X]
-labeled <- which(S_train == 1)
-fit_mu1 <- lm(Y ~ ., data = data.frame(Y = Y_train[labeled], X_train[labeled, ]))
-mu1_hat <- predict(fit_mu1, newdata = data.frame(X))
-
-# Step 4: Estimate ATE (uses Set 2 = all except split_idx)
-result <- proposed_estimator_onesample(X, S, Y, piA_hat, piS_hat,
-                                       split_idx, mu1_hat)
-cat("ATE:", result["est"], "±", 1.96 * result["se"], "\n")
+# Two-sample: manual pipeline
+# ... estimate piA_hat, piS_hat, mu_hat, mu1_hat on Set 1 ...
+result <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat, mu_hat, mu1_hat, split_idx)
 ```
 
-### Two-Sample Setting
+### Using SAR-EM or DETM Directly
 
 ```r
-source("R/causalPUtrt.R")
-
-# Your data: two populations already merged
-# S=0 units from Pop 0, S=1 units from Pop 1
-
-# Estimate piA, piS, mu, mu1 as above, then:
-result <- proposed_estimator_twosample(
-  data    = data.frame(S = S, Y = Y),
-  piA_hat = piA_hat,
-  piS_hat = piS_hat,
-  mu_hat  = mu_hat,   # E[Y|X]
-  mu1_hat = mu1_hat   # E[Y|S=1, X]
-)
-```
-
-### Using SAR-EM Instead of TM
-
-```r
-# Initialize Python (once per session)
+# SAR-EM
 init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
-
-# Fit
 sarem_fit <- fit_sarem(X_train, S_train, max_its = 500)
+preds     <- predict_sarem(sarem_fit, X)
+piA_hat   <- preds$prob_pred
 
-# Predict on full data
-preds   <- predict_sarem(sarem_fit, X)
-piA_hat <- preds$prob_pred   # P(A=1|X)
-e_hat   <- preds$prop_pred   # P(S=1|A=1,X)  (bonus)
-```
-
-### Using DETM Instead of TM
-
-```r
+# DETM
 library(PUEM)
-
 detm_fit <- fit_detm(X_train, S_train)
 piA_hat  <- predict_detm(detm_fit, X)
-e_hat    <- predict_e_detm(detm_fit, X)  # P(S=1|A=1,X)
 ```
 
-## Available Estimators
+## Available Functions
 
 | Function | Description |
 |----------|-------------|
+| `ate_onesample()` | End-to-end one-sample ATE (wrapper) |
+| `ate_twosample()` | End-to-end two-sample ATE (wrapper) |
 | `proposed_estimator_onesample()` | Proposed DR estimator (one-sample) |
 | `proposed_estimator_twosample()` | Proposed DR estimator (two-sample) |
 | `naive_estimator_onesample()` | Naive DR treating S as treatment |
-| `naive_estimator_twosample()` | Naive difference-in-means |
-| `kato_estimator_onesample()` | Kato (NeurIPS 2025) estimator |
+| `naive_estimator_twosample()` | Naive two-sample DR estimator |
 
 ## File Structure
 
@@ -227,6 +223,7 @@ e_hat    <- predict_e_detm(detm_fit, X)  # P(S=1|A=1,X)
 causalPUtrt/
 ├── R/
 │   ├── causalPUtrt.R       # Main entry point (source this)
+│   ├── ate_wrappers.R      # End-to-end wrapper functions
 │   ├── ate_estimators.R    # ATE estimator functions
 │   ├── pu_tm.R             # TM method (pure R)
 │   ├── pu_sarem.R          # SAR-EM wrapper (Python)
@@ -243,5 +240,4 @@ causalPUtrt/
 
 ## References
 
-- Kato, M. (2025). Efficient Average Treatment Effect Estimation with Positive-Unlabeled Data. *NeurIPS 2025*.
 - Bekker, J., & Davis, J. (2020). Learning from positive and unlabeled data: A survey. *Machine Learning*, 109, 719–760.

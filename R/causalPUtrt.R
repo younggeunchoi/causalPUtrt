@@ -28,6 +28,7 @@ source(file.path(.causalPUtrt_dir, "pu_detm.R"))     # Requires PUEM R package
 
 # ATE estimators
 source(file.path(.causalPUtrt_dir, "ate_estimators.R"))
+source(file.path(.causalPUtrt_dir, "ate_wrappers.R"))
 
 message("causalPUtrt loaded. Available PU methods: TM (pure R), SAR-EM (Python), DETM (PUEM).")
 message("  - TM:     ready to use")
