@@ -181,8 +181,8 @@ SAR-EM runs Python's `sarpu` package through `reticulate`. You need:
 
     ```r
     init_sarem(
-      virtualenv_path = "/path/to/your/env",  # conda env or virtualenv path
-      sarpu_path      = "/path/to/SAR-PU/sarpu"
+      python_env = "/path/to/your/env",  # conda env or virtualenv path (auto-detected)
+      sarpu_path = "/path/to/SAR-PU/sarpu"
     )
     ```
 

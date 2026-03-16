@@ -13,12 +13,17 @@
 #' @param sarpu_path Path to sarpu source directory (containing sarpu/ package).
 #'   e.g., "/path/to/SAR_PU_python/sarpu"
 #' @export
-init_sarem <- function(virtualenv_path, sarpu_path) {
+init_sarem <- function(python_env, sarpu_path) {
   if (!requireNamespace("reticulate", quietly = TRUE)) {
     stop("Package 'reticulate' is required for SAR-EM. Install with: install.packages('reticulate')")
   }
 
-  reticulate::use_virtualenv(virtualenv_path, required = TRUE)
+  # Auto-detect conda env vs virtualenv
+  if (file.exists(file.path(python_env, "conda-meta"))) {
+    reticulate::use_condaenv(python_env, required = TRUE)
+  } else {
+    reticulate::use_virtualenv(python_env, required = TRUE)
+  }
 
   reticulate::py_run_string(sprintf('
 import sys

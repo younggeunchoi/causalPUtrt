@@ -32,5 +32,5 @@ source(file.path(.causalPUtrt_dir, "ate_wrappers.R"))
 
 message("causalPUtrt loaded. Available PU methods: TM (pure R), SAR-EM (Python), DETM (PUEM).")
 message("  - TM:     ready to use")
-message("  - SAR-EM: call init_sarem(virtualenv_path, sarpu_path) before use")
+message("  - SAR-EM: call init_sarem(python_env, sarpu_path) before use")
 message("  - DETM:   requires PUEM package (library(PUEM))")
