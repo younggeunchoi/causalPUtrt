@@ -1,6 +1,6 @@
 # causalPUtrt
 
-Doubly robust ATE (Average Treatment Effect) estimation when treatment is observed through **Positive-Unlabeled (PU) labels**.
+ATE (Average Treatment Effect) estimation when treatment is observed through **Positive-Unlabeled (PU) labels**.
 
 ## Problem Setup
 
