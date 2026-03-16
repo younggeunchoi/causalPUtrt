@@ -125,25 +125,63 @@ SAR-EM runs Python's `sarpu` package through `reticulate`. You need:
     install.packages("reticulate")
     ```
 
-2. **Python virtualenv with sarpu installed**:
+2. **Python environment with sarpu installed** (choose one):
+
+    **Option A: Using virtualenv**
 
     ```bash
-    # Create a Python virtualenv
     virtualenv -p python3 /path/to/your/venv
     source /path/to/your/venv/bin/activate
 
-    # Clone and install sarpu
     git clone https://github.com/ML-KULeuven/SAR-PU.git
     cd SAR-PU
     pip install -r requirements.txt
     pip install -e sarpu/
     ```
 
+    **Option B: Using an existing conda/miniconda**
+
+    If you already have conda or miniconda installed:
+
+    ```bash
+    conda create -n sarem_env python=3.10 -y
+    conda activate sarem_env
+
+    git clone https://github.com/ML-KULeuven/SAR-PU.git
+    cd SAR-PU
+    pip install -r requirements.txt
+    pip install -e sarpu/
+    ```
+
+    **Option C: Install miniconda via reticulate**
+
+    If you don't have Python set up yet — this is the simplest option:
+
+    ```r
+    reticulate::install_miniconda()   # one-time setup
+    reticulate::conda_create("sarem_env", python_version = "3.10")
+    ```
+
+    Then install sarpu from the terminal:
+
+    ```bash
+    # Activate the conda env that reticulate created
+    # (path shown in the R output above, typically ~/miniconda/envs/sarem_env)
+    conda activate sarem_env
+
+    git clone https://github.com/ML-KULeuven/SAR-PU.git
+    cd SAR-PU
+    pip install -r requirements.txt
+    pip install -e sarpu/
+    ```
+
+    > **Note:** `reticulate` requires Python built with `--enable-shared`. Most conda/miniconda Pythons satisfy this. System Python from `apt` often does not — if you see a "shared library" error, use Option A or B instead.
+
 3. **In R, initialize before use**:
 
     ```r
     init_sarem(
-      virtualenv_path = "/path/to/your/venv",
+      virtualenv_path = "/path/to/your/env",  # conda env or virtualenv path
       sarpu_path      = "/path/to/SAR-PU/sarpu"
     )
     ```
