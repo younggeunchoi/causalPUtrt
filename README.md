@@ -104,13 +104,7 @@ Three methods are available for estimating π_A(X) = P(A=1|X):
 
 ### Base (TM only)
 
-No installation needed beyond base R + MASS:
-
-```r
-install.packages("MASS")  # for mvrnorm in examples
-```
-
-Clone and use:
+No installation needed beyond base R. Clone and use:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/causalPUtrt.git
