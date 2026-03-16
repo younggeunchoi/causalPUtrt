@@ -5,3 +5,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+Dockerfile
+.dockerignore
+PUEM_src/
+sarpu_src/
