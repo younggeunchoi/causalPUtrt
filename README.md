@@ -24,7 +24,7 @@ The key relationship: `S = 1` implies `A = 1`, but `S = 0` can mean either `A = 
 
 ## Quick Start
 
-The core of this package is the DR estimator that takes `piA_hat` — an estimate of P(A=1|X) — and returns an ATE estimate. How you obtain `piA_hat` is up to you: SAR-EM, SCAR, or any PU learning method.
+The core of this package is the AIPW estimator that takes `piA_hat` — an estimate of P(A=1|X) — and returns an ATE estimate. How you obtain `piA_hat` is up to you: SAR-EM, SCAR, or any PU learning method.
 
 ```r
 source("R/causalPUtrt.R")
@@ -94,7 +94,7 @@ If you need to control sample splitting, nuisance model specification, or use pi
 
 This package includes SAR-EM as a built-in PU method for estimating `piA_hat`, but `piA_hat` can come from any source — SCAR, other PU methods, or domain knowledge.
 
-To use SAR-EM, initialize the Python environment first:
+To use SAR-EM, initialize the Python environment after installing it (see next section): 
 
 ```r
 init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
