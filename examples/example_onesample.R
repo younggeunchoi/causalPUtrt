@@ -38,18 +38,42 @@ cat("True ATE:", ATE_true, "\n")
 cat("Observed: n =", n, ", sum(S=1) =", sum(S), ", P(A=1) =", round(mean(A), 3), "\n\n")
 
 # ===========================================================
-# Method 1: Using the wrapper (recommended)
+# Method 1: SAR-EM via wrapper (requires Python sarpu)
 # ===========================================================
-cat("=== Wrapper: ate_onesample() ===\n\n")
+cat("=== SAR-EM via wrapper ===\n\n")
 
-res_tm <- ate_onesample(X, S, Y, pu_method = "tm", epochs = 500)
-cat("Proposed (TM):  est =", round(res_tm$est, 4),
-    " se =", round(res_tm$se, 4),
-    " 95% CI = [", round(res_tm$ci_lower, 4), ",",
-    round(res_tm$ci_upper, 4), "]\n\n")
+tryCatch({
+  # init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
+  # res_sarem <- ate_onesample(X, S, Y, pu_method = "sarem")
+  # cat("SAR-EM:  est =", round(res_sarem$est, 4),
+  #     " se =", round(res_sarem$se, 4),
+  #     " 95% CI = [", round(res_sarem$ci_lower, 4), ",",
+  #     round(res_sarem$ci_upper, 4), "]\n\n")
+  cat("(Skipped: uncomment and set paths to run SAR-EM)\n\n")
+}, error = function(e) {
+  cat("SAR-EM not available:", e$message, "\n\n")
+})
 
 # ===========================================================
-# Method 2: Low-level estimators (for custom pipelines)
+# Method 2: Custom piA_hat (any external PU method)
+# ===========================================================
+cat("=== Custom piA_hat ===\n\n")
+
+# Example: use a simple logistic regression on S as a rough piA estimate
+fit_rough <- glm(S ~ X1 + X2,
+                 data = data.frame(S = S, X1 = X[,1], X2 = X[,2]),
+                 family = binomial())
+piA_custom <- predict(fit_rough, type = "response")
+# In practice, use your preferred PU method to get piA_hat
+
+res_custom <- ate_onesample(X, S, Y, piA_hat = piA_custom)
+cat("Custom piA: est =", round(res_custom$est, 4),
+    " se =", round(res_custom$se, 4),
+    " 95% CI = [", round(res_custom$ci_lower, 4), ",",
+    round(res_custom$ci_upper, 4), "]\n\n")
+
+# ===========================================================
+# Method 3: Low-level estimators (for custom pipelines)
 # ===========================================================
 cat("=== Low-level estimators ===\n\n")
 
@@ -59,9 +83,12 @@ X1 <- X[split_idx, ]
 S1 <- S[split_idx]
 Y1_split <- Y[split_idx]
 
-# Estimate piA using TM
-tm_fit <- pu_learn_tm(X1, S1, epochs = 500)
-piA_tm <- predict_proba_pu(tm_fit$model_clf, X)
+# Use custom piA (e.g., from logistic regression on S)
+fit_piA <- glm(S ~ X1 + X2,
+               data = data.frame(S = S1, X1 = X1[,1], X2 = X1[,2]),
+               family = binomial())
+piA_hat <- predict(fit_piA, newdata = data.frame(X1 = X[,1], X2 = X[,2]),
+                   type = "response")
 
 # Nuisance parameters on Set 1
 fit_piS <- glm(S ~ X1 + X2,
@@ -87,16 +114,16 @@ mu0_hat <- predict(fit_mu0, newdata = data.frame(X1 = X[,1], X2 = X[,2]))
 # ATE estimates
 cat("ATE Results (True ATE =", ATE_true, "):\n\n")
 
-res_proposed <- proposed_estimator_onesample(S, Y, piA_tm, piS_hat,
+res_proposed <- proposed_estimator_onesample(S, Y, piA_hat, piS_hat,
                                              split_idx, mu1_hat)
-cat("Proposed (TM):  est =", round(res_proposed["est"], 4),
+cat("Proposed:  est =", round(res_proposed["est"], 4),
     " se =", round(res_proposed["se"], 4),
     " 95% CI = [", round(res_proposed["ci_lower"], 4), ",",
     round(res_proposed["ci_upper"], 4), "]\n")
 
 res_naive <- naive_estimator_onesample(S, Y, piS_hat, split_idx,
                                        mu1_hat, mu0_hat)
-cat("Naive:          est =", round(res_naive["est"], 4),
+cat("Naive:     est =", round(res_naive["est"], 4),
     " se =", round(res_naive["se"], 4),
     " 95% CI = [", round(res_naive["ci_lower"], 4), ",",
     round(res_naive["ci_upper"], 4), "]\n")

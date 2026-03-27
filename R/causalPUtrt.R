@@ -17,20 +17,14 @@
 }
 
 # Core utilities (no external dependencies)
-source(file.path(.causalPUtrt_dir, "irwls.R"))
 source(file.path(.causalPUtrt_dir, "pu_utils.R"))
-source(file.path(.causalPUtrt_dir, "pu_models.R"))
 
 # PU learning methods
-source(file.path(.causalPUtrt_dir, "pu_tm.R"))       # Pure R
 source(file.path(.causalPUtrt_dir, "pu_sarem.R"))    # Requires reticulate + Python sarpu
-source(file.path(.causalPUtrt_dir, "pu_detm.R"))     # Requires PUEM R package
 
 # ATE estimators
 source(file.path(.causalPUtrt_dir, "ate_estimators.R"))
 source(file.path(.causalPUtrt_dir, "ate_wrappers.R"))
 
-message("causalPUtrt loaded. Available PU methods: TM (pure R), SAR-EM (Python), DETM (PUEM).")
-message("  - TM:     ready to use")
+message("causalPUtrt loaded. PU method: SAR-EM (Python). Use piA_hat param for custom estimates.")
 message("  - SAR-EM: call init_sarem(python_env, sarpu_path) before use")
-message("  - DETM:   requires PUEM package (library(PUEM))")

@@ -49,18 +49,41 @@ cat("True ATE (Pop 0):", ATE_true, "\n")
 cat("n0 =", n0, ", n1 =", n1, "\n\n")
 
 # ===========================================================
-# Using the wrapper (recommended)
+# Method 1: SAR-EM via wrapper (requires Python sarpu)
 # ===========================================================
-cat("=== Wrapper: ate_twosample() ===\n\n")
+cat("=== SAR-EM via wrapper ===\n\n")
 
-res_tm <- ate_twosample(X, S, Y, pu_method = "tm", epochs = 500)
-cat("Proposed (TM):  est =", round(res_tm$est, 4),
-    " se =", round(res_tm$se, 4),
-    " 95% CI = [", round(res_tm$ci_lower, 4), ",",
-    round(res_tm$ci_upper, 4), "]\n\n")
+tryCatch({
+  # init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
+  # res_sarem <- ate_twosample(X, S, Y, pu_method = "sarem")
+  # cat("SAR-EM:  est =", round(res_sarem$est, 4),
+  #     " se =", round(res_sarem$se, 4),
+  #     " 95% CI = [", round(res_sarem$ci_lower, 4), ",",
+  #     round(res_sarem$ci_upper, 4), "]\n\n")
+  cat("(Skipped: uncomment and set paths to run SAR-EM)\n\n")
+}, error = function(e) {
+  cat("SAR-EM not available:", e$message, "\n\n")
+})
 
 # ===========================================================
-# Low-level estimators
+# Method 2: Custom piA_hat (any external PU method)
+# ===========================================================
+cat("=== Custom piA_hat ===\n\n")
+
+# Example: use a simple logistic regression on S as a rough piA estimate
+fit_rough <- glm(S ~ X1 + X2,
+                 data = data.frame(S = S, X1 = X[,1], X2 = X[,2]),
+                 family = binomial())
+piA_custom <- predict(fit_rough, type = "response")
+
+res_custom <- ate_twosample(X, S, Y, piA_hat = piA_custom)
+cat("Custom piA: est =", round(res_custom$est, 4),
+    " se =", round(res_custom$se, 4),
+    " 95% CI = [", round(res_custom$ci_lower, 4), ",",
+    round(res_custom$ci_upper, 4), "]\n\n")
+
+# ===========================================================
+# Method 3: Low-level estimators (for custom pipelines)
 # ===========================================================
 cat("=== Low-level estimators ===\n\n")
 
@@ -69,9 +92,12 @@ X1_split <- X[split_idx, ]
 S1_split <- S[split_idx]
 Y1_split <- Y[split_idx]
 
-# PU learning
-tm_fit <- pu_learn_tm(X1_split, S1_split, epochs = 500)
-piA_hat <- predict_proba_pu(tm_fit$model_clf, X)
+# PU learning: use custom piA
+fit_piA <- glm(S ~ X1 + X2,
+               data = data.frame(S = S1_split, X1 = X1_split[,1], X2 = X1_split[,2]),
+               family = binomial())
+piA_hat <- predict(fit_piA, newdata = data.frame(X1 = X[,1], X2 = X[,2]),
+                   type = "response")
 piA_hat <- pmax(0.001, pmin(0.999, piA_hat))
 
 # Nuisance
@@ -104,14 +130,14 @@ cat("ATE Results (True ATE =", ATE_true, "):\n\n")
 
 res_proposed <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat,
                                              mu_hat, mu1_hat, split_idx)
-cat("Proposed (TM):  est =", round(res_proposed["est"], 4),
+cat("Proposed:  est =", round(res_proposed["est"], 4),
     " se =", round(res_proposed["se"], 4),
     " 95% CI = [", round(res_proposed["ci_lower"], 4), ",",
     round(res_proposed["ci_upper"], 4), "]\n")
 
 res_naive <- naive_estimator_twosample(S, Y, piS_hat, split_idx,
                                        mu1_hat, mu0_hat)
-cat("Naive DR:       est =", round(res_naive["est"], 4),
+cat("Naive DR:  est =", round(res_naive["est"], 4),
     " se =", round(res_naive["se"], 4),
     " 95% CI = [", round(res_naive["ci_lower"], 4), ",",
     round(res_naive["ci_upper"], 4), "]\n")

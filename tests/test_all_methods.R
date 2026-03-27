@@ -1,8 +1,8 @@
 # test_all_methods.R
-# Clean environment test for all three PU methods: TM, SAR-EM, DETM
+# Clean environment test for SAR-EM and custom piA_hat
 # Run from repo root via Docker (see Dockerfile)
 
-cat("=== Full clean install test (TM + SAR-EM + DETM) ===\n\n")
+cat("=== Full clean install test (SAR-EM + custom piA) ===\n\n")
 
 source("R/causalPUtrt.R")
 
@@ -31,19 +31,8 @@ cat("n =", n, ", sum(S=1) =", sum(S), "\n\n")
 pass <- 0
 fail <- 0
 
-# --- TM ---
-cat("--- [1/3] TM ---\n")
-tryCatch({
-  res <- ate_onesample(X, S, Y, pu_method = "tm", epochs = 500)
-  cat("  est =", round(res$est, 4), " se =", round(res$se, 4), "\n  PASS\n\n")
-  pass <- pass + 1
-}, error = function(e) {
-  cat("  FAIL:", e$message, "\n\n")
-  fail <<- fail + 1
-})
-
 # --- SAR-EM ---
-cat("--- [2/3] SAR-EM ---\n")
+cat("--- [1/2] SAR-EM ---\n")
 tryCatch({
   init_sarem("/root/.virtualenvs/sarem_venv", "/tmp/sarpu_src")
   res <- ate_onesample(X, S, Y, pu_method = "sarem", max_its = 500)
@@ -54,11 +43,13 @@ tryCatch({
   fail <<- fail + 1
 })
 
-# --- DETM ---
-cat("--- [3/3] DETM ---\n")
+# --- Custom piA_hat ---
+cat("--- [2/2] Custom piA_hat ---\n")
 tryCatch({
-  library(PUEM)
-  res <- ate_onesample(X, S, Y, pu_method = "detm")
+  # Use logistic regression on S as a rough piA estimate
+  fit_rough <- glm(S ~ X, family = binomial())
+  piA_custom <- fitted(fit_rough)
+  res <- ate_onesample(X, S, Y, piA_hat = piA_custom)
   cat("  est =", round(res$est, 4), " se =", round(res$se, 4), "\n  PASS\n\n")
   pass <- pass + 1
 }, error = function(e) {

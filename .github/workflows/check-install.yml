@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  check-tm:
-    name: Clean install test (TM only)
+  check-install:
+    name: Clean install test
     runs-on: ubuntu-latest
 
     steps:

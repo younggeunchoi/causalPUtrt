@@ -11,18 +11,20 @@
 #' @param X Feature matrix (n x p)
 #' @param S PU labels (0/1 vector)
 #' @param Y Outcome vector
-#' @param pu_method PU learning method: "tm", "sarem", or "detm"
+#' @param pu_method PU learning method: "sarem"
+#' @param piA_hat Optional pre-estimated P(A=1|X) vector of length n.
+#'   If provided, PU learning is skipped and this is used directly.
 #' @param split_idx Optional pre-specified Set 1 indices (default: random n/2)
-#' @param epochs TM epochs (default: 500)
 #' @param max_its SAR-EM max iterations (default: 500)
 #' @param C SAR-EM regularization (default: 1.0)
 #' @param trunc Truncation bounds (default: c(0.001, 0.999))
 #' @return List with est, se, ci_lower, ci_upper, piA_hat, piS_hat, mu1_hat,
 #'         split_idx, pu_fit
 #' @export
-ate_onesample <- function(X, S, Y, pu_method = "tm",
+ate_onesample <- function(X, S, Y, pu_method = "sarem",
+                          piA_hat = NULL,
                           split_idx = NULL,
-                          epochs = 500, max_its = 500, C = 1.0,
+                          max_its = 500, C = 1.0,
                           trunc = c(0.001, 0.999)) {
   n <- nrow(X)
   if (is.null(split_idx)) {
@@ -35,20 +37,18 @@ ate_onesample <- function(X, S, Y, pu_method = "tm",
 
   # --- PU learning on Set 1, predict on full X ---
   pu_fit <- NULL
-  if (pu_method == "tm") {
-    pu_fit  <- pu_learn_tm(X1, S1, epochs = epochs)
-    piA_hat <- predict_proba_pu(pu_fit$model_clf, X)
+  if (!is.null(piA_hat)) {
+    # User-supplied piA estimates — skip PU learning
+    if (length(piA_hat) != n) {
+      stop("piA_hat must have length n (", n, "), got ", length(piA_hat))
+    }
   } else if (pu_method == "sarem") {
     pu_fit  <- fit_sarem(X1, S1, max_its = max_its, C = C)
     if (pu_fit$error) stop("SAR-EM failed to converge.")
     preds   <- predict_sarem(pu_fit, X)
     piA_hat <- preds$prob_pred
-  } else if (pu_method == "detm") {
-    pu_fit  <- fit_detm(X1, S1)
-    if (pu_fit$error) stop("DETM failed to converge.")
-    piA_hat <- predict_detm(pu_fit, X)
   } else {
-    stop("Unknown pu_method: ", pu_method, ". Use 'tm', 'sarem', or 'detm'.")
+    stop("Unknown pu_method: ", pu_method, ". Use 'sarem' or provide piA_hat directly.")
   }
 
   # --- Nuisance estimation on Set 1 ---
@@ -93,18 +93,20 @@ ate_onesample <- function(X, S, Y, pu_method = "tm",
 #' @param X Feature matrix (n x p)
 #' @param S PU labels (0/1 vector)
 #' @param Y Outcome vector
-#' @param pu_method PU learning method: "tm", "sarem", or "detm"
+#' @param pu_method PU learning method: "sarem"
+#' @param piA_hat Optional pre-estimated P(A=1|X) vector of length n.
+#'   If provided, PU learning is skipped and this is used directly.
 #' @param split_idx Optional pre-specified Set 1 indices (default: random n/2)
-#' @param epochs TM epochs (default: 500)
 #' @param max_its SAR-EM max iterations (default: 500)
 #' @param C SAR-EM regularization (default: 1.0)
 #' @param trunc Truncation bounds (default: c(0.001, 0.999))
 #' @return List with est, se, ci_lower, ci_upper, piA_hat, piS_hat, mu_hat,
 #'         mu1_hat, split_idx, pu_fit
 #' @export
-ate_twosample <- function(X, S, Y, pu_method = "tm",
+ate_twosample <- function(X, S, Y, pu_method = "sarem",
+                          piA_hat = NULL,
                           split_idx = NULL,
-                          epochs = 500, max_its = 500, C = 1.0,
+                          max_its = 500, C = 1.0,
                           trunc = c(0.001, 0.999)) {
   n <- nrow(X)
   if (is.null(split_idx)) {
@@ -117,20 +119,18 @@ ate_twosample <- function(X, S, Y, pu_method = "tm",
 
   # --- PU learning on Set 1, predict on full X ---
   pu_fit <- NULL
-  if (pu_method == "tm") {
-    pu_fit  <- pu_learn_tm(X1, S1, epochs = epochs)
-    piA_hat <- predict_proba_pu(pu_fit$model_clf, X)
+  if (!is.null(piA_hat)) {
+    # User-supplied piA estimates — skip PU learning
+    if (length(piA_hat) != n) {
+      stop("piA_hat must have length n (", n, "), got ", length(piA_hat))
+    }
   } else if (pu_method == "sarem") {
     pu_fit  <- fit_sarem(X1, S1, max_its = max_its, C = C)
     if (pu_fit$error) stop("SAR-EM failed to converge.")
     preds   <- predict_sarem(pu_fit, X)
     piA_hat <- preds$prob_pred
-  } else if (pu_method == "detm") {
-    pu_fit  <- fit_detm(X1, S1)
-    if (pu_fit$error) stop("DETM failed to converge.")
-    piA_hat <- predict_detm(pu_fit, X)
   } else {
-    stop("Unknown pu_method: ", pu_method, ". Use 'tm', 'sarem', or 'detm'.")
+    stop("Unknown pu_method: ", pu_method, ". Use 'sarem' or provide piA_hat directly.")
   }
 
   # --- Nuisance estimation on Set 1 ---
