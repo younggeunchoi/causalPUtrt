@@ -19,12 +19,15 @@
 # Core utilities (no external dependencies)
 source(file.path(.causalPUtrt_dir, "pu_utils.R"))
 
-# PU learning methods
-source(file.path(.causalPUtrt_dir, "pu_sarem.R"))    # Requires reticulate + Python sarpu
+# Treatment-propensity (piA) estimation methods
+source(file.path(.causalPUtrt_dir, "pu_sarem.R"))    # SAR-EM: requires reticulate + Python sarpu
+source(file.path(.causalPUtrt_dir, "pu_scar.R"))     # SCAR:   pure R, requires known c
 
 # ATE estimators
 source(file.path(.causalPUtrt_dir, "ate_estimators.R"))
 source(file.path(.causalPUtrt_dir, "ate_wrappers.R"))
 
-message("causalPUtrt loaded. PU method: SAR-EM (Python). Use piA_hat param for custom estimates.")
+message("causalPUtrt loaded. piA methods: SAR-EM (Python, norefit), SCAR (pure R, known c).")
 message("  - SAR-EM: call init_sarem(python_env, sarpu_path) before use")
+message("  - SCAR:   pu_method = 'scar' with c_known = P(S=1|A=1)")
+message("  - SE: Theorem-3/S3 corrected (psi + B'xi_theta); xi_theta is method-dependent (see README)")

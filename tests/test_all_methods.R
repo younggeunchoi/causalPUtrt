@@ -1,8 +1,9 @@
 # test_all_methods.R
-# Clean environment test for SAR-EM and custom piA_hat
-# Run from repo root via Docker (see Dockerfile)
+# Clean environment test for SCAR, SAR-EM, and custom piA_hat
+# Run from repo root via Docker (see Dockerfile).
+# SAR-EM paths can be overridden with env vars SAREM_VENV / SARPU_PATH.
 
-cat("=== Full clean install test (SAR-EM + custom piA) ===\n\n")
+cat("=== Full clean install test (SCAR + SAR-EM + custom piA) ===\n\n")
 
 source("R/causalPUtrt.R")
 
@@ -31,10 +32,24 @@ cat("n =", n, ", sum(S=1) =", sum(S), "\n\n")
 pass <- 0
 fail <- 0
 
-# --- SAR-EM ---
-cat("--- [1/2] SAR-EM ---\n")
+# --- SCAR (pure R, always available) ---
+cat("--- [1/3] SCAR ---\n")
 tryCatch({
-  init_sarem("/root/.virtualenvs/sarem_venv", "/tmp/sarpu_src")
+  c_known <- mean(e_true[A == 1])   # oracle labeling rate (simulation only)
+  res <- ate_onesample(X, S, Y, pu_method = "scar", c_known = c_known)
+  cat("  est =", round(res$est, 4), " se =", round(res$se, 4), "\n  PASS\n\n")
+  pass <- pass + 1
+}, error = function(e) {
+  cat("  FAIL:", e$message, "\n\n")
+  fail <<- fail + 1
+})
+
+# --- SAR-EM ---
+cat("--- [2/3] SAR-EM ---\n")
+tryCatch({
+  venv  <- Sys.getenv("SAREM_VENV", "/root/.virtualenvs/sarem_venv")
+  sarpu <- Sys.getenv("SARPU_PATH", "/tmp/sarpu_src")
+  init_sarem(venv, sarpu)
   res <- ate_onesample(X, S, Y, pu_method = "sarem", max_its = 500)
   cat("  est =", round(res$est, 4), " se =", round(res$se, 4), "\n  PASS\n\n")
   pass <- pass + 1
@@ -43,8 +58,8 @@ tryCatch({
   fail <<- fail + 1
 })
 
-# --- Custom piA_hat ---
-cat("--- [2/2] Custom piA_hat ---\n")
+# --- Custom piA_hat (no theta-correction) ---
+cat("--- [3/3] Custom piA_hat ---\n")
 tryCatch({
   # Use logistic regression on S as a rough piA estimate
   fit_rough <- glm(S ~ X, family = binomial())

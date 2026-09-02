@@ -5,6 +5,7 @@
 #   Pop 0 (S=0): n0=1000, A ~ Bern(0.3), X|A=1 ~ MVN(0,0), X|A=0 ~ MVN(0.5,-0.5)
 #   Pop 1 (S=1): n1=500,  A=1 (all treated), X ~ MVN(m, -m), m=0.2
 #   Y^0 = X1 - X2 + eps;  Y^1 = Y^0 + 0.5 + 0.25*X1 - 0.25*X2
+# Target: tau^UL = E(Y^1 - Y^0 | S=0)
 
 library(MASS)
 source("R/causalPUtrt.R")
@@ -49,7 +50,26 @@ cat("True ATE (Pop 0):", ATE_true, "\n")
 cat("n0 =", n0, ", n1 =", n1, "\n\n")
 
 # ===========================================================
-# Method 1: SAR-EM via wrapper (requires Python sarpu)
+# Method 1: SCAR via wrapper (pure R)
+# ===========================================================
+cat("=== SCAR via wrapper ===\n\n")
+
+# SCAR requires the labeling rate c = P(S=1|A=1) to be KNOWN. In the combined
+# case-control sample, the treated units are Pop 1 (all labeled) plus the
+# treated part of Pop 0 (unlabeled), so the oracle value is
+# c = n1 / (n1 + #treated in Pop 0). In practice c must come from external
+# knowledge (it is not identifiable from (X, S, Y) alone).
+c_known <- n1 / (n1 + sum(A0))
+cat("c_known (oracle):", round(c_known, 4), "\n")
+
+res_scar <- ate_twosample(X, S, Y, pu_method = "scar", c_known = c_known)
+cat("SCAR:    est =", round(res_scar$est, 4),
+    " se =", round(res_scar$se, 4),
+    " 95% CI = [", round(res_scar$ci_lower, 4), ",",
+    round(res_scar$ci_upper, 4), "]\n\n")
+
+# ===========================================================
+# Method 2: SAR-EM via wrapper (requires Python sarpu)
 # ===========================================================
 cat("=== SAR-EM via wrapper ===\n\n")
 
@@ -66,11 +86,14 @@ tryCatch({
 })
 
 # ===========================================================
-# Method 2: Custom piA_hat (any external PU method)
+# Method 3: Custom piA_hat (any external source)
 # ===========================================================
 cat("=== Custom piA_hat ===\n\n")
 
-# Example: use a simple logistic regression on S as a rough piA estimate
+# Example: use a simple logistic regression on S as a rough piA estimate.
+# NOTE: with a user-supplied piA_hat the theta-correction is omitted; the
+# reported SE is valid only if piA is known or estimated at o_p(n^{-1/2})
+# rate (condition (R1) of Theorem 2).
 fit_rough <- glm(S ~ X1 + X2,
                  data = data.frame(S = S, X1 = X[,1], X2 = X[,2]),
                  family = binomial())
@@ -83,7 +106,7 @@ cat("Custom piA: est =", round(res_custom$est, 4),
     round(res_custom$ci_upper, 4), "]\n\n")
 
 # ===========================================================
-# Method 3: Low-level estimators (for custom pipelines)
+# Method 4: Low-level estimators (for custom pipelines)
 # ===========================================================
 cat("=== Low-level estimators ===\n\n")
 
@@ -91,14 +114,14 @@ split_idx <- sample(1:n, n/2)
 X1_split <- X[split_idx, ]
 S1_split <- S[split_idx]
 Y1_split <- Y[split_idx]
+ev <- setdiff(1:n, split_idx)
 
-# PU learning: use custom piA
-fit_piA <- glm(S ~ X1 + X2,
-               data = data.frame(S = S1_split, X1 = X1_split[,1], X2 = X1_split[,2]),
-               family = binomial())
-piA_hat <- predict(fit_piA, newdata = data.frame(X1 = X[,1], X2 = X[,2]),
-                   type = "response")
-piA_hat <- pmax(0.001, pmin(0.999, piA_hat))
+# piA via SCAR MLE (pure R) with its influence function
+Z_tr <- cbind(1, X1_split)
+Z_ev <- cbind(1, X[ev, , drop = FALSE])
+fs   <- fit_scar_mle(Z_tr, S1_split, c_known)
+piA_hat <- as.vector(plogis(cbind(1, X) %*% fs$theta))
+Xi_ev   <- xi_scar_eval(fs$theta, c_known, Z_tr, S1_split, Z_ev, S[ev])
 
 # Nuisance
 fit_piS <- glm(S ~ X1 + X2,
@@ -128,16 +151,25 @@ mu0_hat <- predict(fit_mu0, newdata = data.frame(X1 = X[,1], X2 = X[,2]))
 
 cat("ATE Results (True ATE =", ATE_true, "):\n\n")
 
+# With the theta-correction (Z_ev + Xi_ev supplied)
 res_proposed <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat,
-                                             mu_hat, mu1_hat, split_idx)
-cat("Proposed:  est =", round(res_proposed["est"], 4),
+                                             mu_hat, mu1_hat, split_idx,
+                                             Z_ev = Z_ev, Xi_ev = Xi_ev)
+cat("Proposed (corrected SE):   est =", round(res_proposed["est"], 4),
     " se =", round(res_proposed["se"], 4),
     " 95% CI = [", round(res_proposed["ci_lower"], 4), ",",
     round(res_proposed["ci_upper"], 4), "]\n")
 
+# Without the correction (omit Xi_ev; only valid if piA is known or
+# estimated at o_p(n^{-1/2}) rate)
+res_nocorr <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat,
+                                           mu_hat, mu1_hat, split_idx)
+cat("Proposed (no correction):  est =", round(res_nocorr["est"], 4),
+    " se =", round(res_nocorr["se"], 4), "\n")
+
 res_naive <- naive_estimator_twosample(S, Y, piS_hat, split_idx,
                                        mu1_hat, mu0_hat)
-cat("Naive DR:  est =", round(res_naive["est"], 4),
+cat("Naive DR:                  est =", round(res_naive["est"], 4),
     " se =", round(res_naive["se"], 4),
     " 95% CI = [", round(res_naive["ci_lower"], 4), ",",
     round(res_naive["ci_upper"], 4), "]\n")

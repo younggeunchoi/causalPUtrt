@@ -20,81 +20,90 @@ The key relationship: `S = 1` implies `A = 1`, but `S = 0` can mean either `A = 
 | Setting | Description | Estimator | Convenience wrapper |
 |---------|-------------|-----------|---------------------|
 | **One-sample** | All units from one population | `proposed_estimator_onesample()` | `ate_onesample()` |
-| **Two-sample** | Pop 0 (S=0) and Pop 1 (S=1) sampled separately (case-control) | `proposed_estimator_twosample()` | `ate_twosample()` |
+| **Two-sample** | Pop 0 (S=0) and Pop 1 (S=1) sampled separately (case-control); target τ^UL = E(Y¹−Y⁰ \| S=0) | `proposed_estimator_twosample()` | `ate_twosample()` |
 
 ## Quick Start
-
-The core of this package is the AIPW estimator that takes `piA_hat` — an estimate of P(A=1|X) — and returns an ATE estimate. How you obtain `piA_hat` is up to you: SAR-EM, SCAR, or any PU learning method.
 
 ```r
 source("R/causalPUtrt.R")
 
-# You provide: piA_hat, piS_hat, mu1_hat (and mu_hat for two-sample)
-# The estimator does the rest.
+# SCAR (pure R; requires the known labeling rate c = P(S=1|A=1))
+res <- ate_onesample(X, S, Y, pu_method = "scar", c_known = c)
 
-# One-sample
-result <- proposed_estimator_onesample(S, Y, piA_hat, piS_hat, split_idx, mu1_hat)
+# SAR-EM (requires Python; see Installation)
+# init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
+# res <- ate_onesample(X, S, Y, pu_method = "sarem")
 
-# Two-sample (case-control)
-result <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat, mu_hat, mu1_hat, split_idx)
-```
-
-For a quick end-to-end run, use the convenience wrappers which handle sample splitting and nuisance estimation internally:
-
-```r
-# With your own piA_hat
+# Or supply your own piA_hat (theta-correction omitted; see the warning below)
 res <- ate_onesample(X, S, Y, piA_hat = my_piA_hat)
 
-# Or let the wrapper run SAR-EM for you (requires Python; see Installation)
-# init_sarem("/path/to/venv", "/path/to/sarpu")
-# res <- ate_onesample(X, S, Y, pu_method = "sarem")
+res$est; res$se; c(res$ci_lower, res$ci_upper)
 ```
 
 See `examples/example_onesample.R` and `examples/example_twosample.R` for full working examples with data generation.
 
+
 ## Usage
 
-### Estimators (core interface)
+### Convenience Wrappers
 
-The estimators take pre-computed nuisance parameters and return ATE with standard error and confidence interval. You control every step: how `piA_hat` is estimated, whether to use sample splitting, and how nuisance parameters are fitted.
+`ate_onesample()` and `ate_twosample()` bundle sample splitting, π_A estimation, nuisance estimation, and the corrected SE into a single call.
 
 ```r
-# One-sample
-split_idx <- sample(1:n, n/2)
-# ... estimate piA_hat, piS_hat, mu1_hat on Set 1 ...
-result <- proposed_estimator_onesample(S, Y, piA_hat, piS_hat, split_idx, mu1_hat)
-# result: named vector with est, se, ci_lower, ci_upper
+# SCAR: c = P(S=1|A=1) must be known (it is not identifiable from (X,S,Y) alone)
+res <- ate_onesample(X, S, Y, pu_method = "scar", c_known = 0.6)
 
-# Two-sample
-result <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat, mu_hat, mu1_hat, split_idx)
+# SAR-EM (after init_sarem)
+res <- ate_onesample(X, S, Y, pu_method = "sarem")
+
+# Custom piA_hat (theta-correction omitted; see warning above)
+res <- ate_onesample(X, S, Y, piA_hat = my_piA_hat)
 ```
 
-Naive estimators (treating S as A) are also provided for comparison:
+Built-in π_A methods:
+
+| Method | Backend | Extra requirement | Fitter / ξ_θ |
+|--------|---------|-------------------|--------------|
+| **SCAR** | Pure R | known `c = P(S=1\|A=1)` | `fit_scar_mle()` / `xi_scar_eval()` |
+| **SAR-EM** | Python via reticulate | sarpu | `fit_sarem()` / `xi_sar_eval()` |
+
+### Core Estimators (low-level)
+
+The estimators take pre-computed nuisance values plus (optionally) the design matrix `Z_ev` and influence-function values `Xi_ev` at the eval observations:
+
+```r
+split_idx <- sample(1:n, n/2)
+ev   <- setdiff(1:n, split_idx)
+Z_tr <- cbind(1, X[split_idx, ]);  Z_ev <- cbind(1, X[ev, ])
+
+# Example: SAR-EM piA with its influence function (after init_sarem)
+sarem_fit <- fit_sarem(X[split_idx, ], S[split_idx], max_its = 500, C = 1.0)
+piA_hat   <- predict_sarem(sarem_fit, X)$prob_pred
+ridge     <- 1 / (length(split_idx) * 1.0)   # 1/(n_tr * C)
+Xi_ev     <- xi_sar_eval(sarem_fit$theta, sarem_fit$phi,
+                         Z_tr, Z_tr, S[split_idx],    # W_tr = Z_tr (both models
+                         Z_ev, Z_ev, S[ev], ridge)    #  use all covariates)
+
+# ... estimate piS_hat, mu1_hat (and mu_hat for two-sample) on Set 1 ...
+
+result <- proposed_estimator_onesample(S, Y, piA_hat, piS_hat, split_idx, mu1_hat,
+                                       Z_ev = Z_ev, Xi_ev = Xi_ev)
+# named vector: est, se, ci_lower, ci_upper
+
+result <- proposed_estimator_twosample(S, Y, piA_hat, piS_hat, mu_hat, mu1_hat,
+                                       split_idx, Z_ev = Z_ev, Xi_ev = Xi_ev)
+```
+
+Omitting `Xi_ev` drops the θ-correction (valid only if π_A is known or estimated at o_p(n^{-1/2}) rate). Naive estimators (treating S as A) are also provided for comparison:
 
 ```r
 result <- naive_estimator_onesample(S, Y, piS_hat, split_idx, mu1_hat, mu0_hat)
 result <- naive_estimator_twosample(S, Y, piS_hat, split_idx, mu1_hat, mu0_hat)
 ```
 
-### Convenience Wrappers
-
-`ate_onesample()` and `ate_twosample()` bundle sample splitting, nuisance estimation, and ATE computation into a single call. Useful for quick experiments, but not the only way to use this package.
-
-```r
-# Provide piA_hat directly — wrapper handles splitting and nuisance estimation
-res <- ate_onesample(X, S, Y, piA_hat = my_piA_hat)
-
-# Or let the wrapper also run SAR-EM to estimate piA_hat
-res <- ate_onesample(X, S, Y, pu_method = "sarem")
-```
-
-If you need to control sample splitting, nuisance model specification, or use piA_hat from an external source that was already fitted on a separate sample, use the core estimators directly.
-
 ### SAR-EM Setup
 
-This package includes SAR-EM as a built-in PU method for estimating `piA_hat`, but `piA_hat` can come from any source — SCAR, other PU methods, or domain knowledge.
-
-To use SAR-EM, initialize the Python environment after installing it (see next section): 
+To use SAR-EM, initialize the Python environment after installing it (see next section):
 
 ```r
 init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
@@ -102,10 +111,9 @@ init_sarem("/path/to/venv", "/path/to/SAR-PU/sarpu")
 # Use via wrapper
 res <- ate_onesample(X, S, Y, pu_method = "sarem")
 
-# Or standalone
-sarem_fit <- fit_sarem(X, S, max_its = 500)
-preds     <- predict_sarem(sarem_fit, X)
-piA_hat   <- preds$prob_pred
+# Or standalone (coefficients only cross the R/Python boundary)
+sarem_fit <- fit_sarem(X_train, S_train, max_its = 500)
+piA_hat   <- predict_sarem(sarem_fit, X)$prob_pred
 ```
 
 ## Installation
@@ -119,7 +127,7 @@ cd causalPUtrt
 source("R/causalPUtrt.R")
 ```
 
-The core estimators have no external dependencies. SAR-EM requires additional setup:
+The core estimators and SCAR have no external dependencies. SAR-EM requires additional setup:
 
 ### SAR-EM (Python dependency)
 
@@ -169,11 +177,13 @@ The core estimators have no external dependencies. SAR-EM requires additional se
 
 | Function | Role | Description |
 |----------|------|-------------|
-| `proposed_estimator_onesample()` | **Estimator** | Proposed DR estimator (one-sample), takes `piA_hat` directly |
-| `proposed_estimator_twosample()` | **Estimator** | Proposed DR estimator (two-sample / case-control) |
+| `proposed_estimator_onesample()` | **Estimator** | Proposed AIPW (one-sample), corrected SE via `Z_ev`/`Xi_ev` |
+| `proposed_estimator_twosample()` | **Estimator** | Proposed AIPW (two-sample / case-control), corrected SE |
 | `naive_estimator_onesample()` | **Estimator** | Naive DR treating S as A |
 | `naive_estimator_twosample()` | **Estimator** | Naive two-sample DR |
-| `ate_onesample()` | Wrapper | Convenience: split + nuisance + ATE (`piA_hat` or `pu_method = "sarem"`) |
+| `fit_scar_mle()` / `xi_scar_eval()` | π_A method | SCAR scaled-logistic MLE (known c) and its influence function |
+| `fit_sarem()` / `predict_sarem()` / `xi_sar_eval()` | π_A method | SAR-EM (norefit) and its penalized-joint influence function |
+| `ate_onesample()` | Wrapper | split + π_A + nuisance + corrected-SE ATE |
 | `ate_twosample()` | Wrapper | Same for two-sample |
 
 ## File Structure
@@ -182,15 +192,34 @@ The core estimators have no external dependencies. SAR-EM requires additional se
 causalPUtrt/
 ├── R/
 │   ├── causalPUtrt.R       # Main entry point (source this)
-│   ├── ate_estimators.R    # ATE estimator functions (core)
+│   ├── ate_estimators.R    # AIPW estimators with corrected (Thm 3/S3) SE
 │   ├── ate_wrappers.R      # Convenience wrapper functions
-│   ├── pu_sarem.R          # SAR-EM wrapper (Python)
+│   ├── pu_scar.R           # SCAR scaled-logistic MLE + xi_theta (pure R)
+│   ├── pu_sarem.R          # SAR-EM norefit wrapper + xi_theta (Python)
 │   └── pu_utils.R          # Utility functions
 ├── examples/
-│   ├── example_onesample.R     # One-sample example
+│   ├── example_onesample.R     # One-sample example (SCAR runs out of the box)
 │   └── example_twosample.R     # Two-sample example
 └── README.md
 ```
+
+## Theoretical Note about Standard Errors
+
+The reported SE is the **corrected variance** of the paper's Theorem 3 (one-sample) and Theorem S3 (two-sample). When π_A is estimated by a parametric model with coefficient estimator θ̂ satisfying a √n asymptotic linear expansion with influence function ξ_θ, the influence function of the AIPW estimator is
+
+```
+psi_par_i = psi_i + B' xi_theta_i        (one-sample; Theorem 3)
+psi_par_i = psi^UL_i + B_UL' xi_theta_i  (two-sample; Theorem S3)
+```
+
+and the SE is the empirical standard deviation of `psi_par` over the estimation (eval) half, divided by √n_ev. The plug-in variance of `psi` alone (without the θ-correction) ignores the uncertainty from estimating π_A and can severely under-cover.
+
+> **⚠ ξ_θ is method-dependent.** This package provides ξ_θ for **exactly two** π_A estimation procedures:
+>
+> 1. **SCAR** — the scaled-logistic MLE `piS(X;θ) = c·expit(θ'Z)` with **known** `c = P(S=1|A=1)`, which induces `piA(X;θ) = expit(θ'Z)`. Its MLE influence function is implemented in `xi_scar_eval()`.
+> 2. **SAR** — SAR-EM run without the classifier refit (`refit_classifier=False`), so that (θ̂, φ̂) solves the L2-penalized joint logistic estimating equation. The θ-block of the penalized joint influence function (ridge `1/(n_tr·C)` matching sklearn's penalty) is implemented in `xi_sar_eval()`.
+>
+> If you estimate π_A by **any other procedure**, these ξ_θ formulas above do **not** apply — you must derive the influence function of your own estimator and pass it via the `Xi_ev` argument of the low-level estimators. When you supply `piA_hat` directly to the wrappers, the θ-correction is omitted; the reported SE is then valid only if π_A is known or estimated at o_p(n^{-1/2}) rate (condition (R1) of Theorem 2).
 
 ## References
 

@@ -49,3 +49,12 @@ make_propensity_weighted_data <- function(x, s, e, sample_weight = NULL) {
 sigmoid <- function(x) {
   1 / (1 + exp(-x))
 }
+
+#' Clip probabilities away from 0 and 1
+#'
+#' @param p Vector of probabilities
+#' @param e Clipping margin (default: 1e-6)
+#' @return p clipped to [e, 1 - e]
+clip <- function(p, e = 1e-6) {
+  pmax(e, pmin(1 - e, p))
+}
